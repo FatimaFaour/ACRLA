@@ -1,0 +1,103 @@
+# ==================================================
+# Secrets / local configuration
+# ==================================================
+.env
+.env.*
+!.env.example
+
+# ==================================================
+# Python
+# ==================================================
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# ==================================================
+# Node / frontend tooling (if ever introduced)
+# ==================================================
+node_modules/
+
+# ==================================================
+# IDE / editor local files
+# ==================================================
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ==================================================
+# Logs
+# ==================================================
+*.log
+logs/
+backend/*.out.log
+backend/*.err.log
+
+# ==================================================
+# Local runtime / process artifacts
+# ==================================================
+*.pid
+.acrla_test_*.txt
+
+# ==================================================
+# Local databases
+# ==================================================
+*.sqlite3
+*.db
+
+# ==================================================
+# ChromaDB runtime / persistent vector store data
+# ==================================================
+backend/chroma_db/
+chroma_db/
+**/chroma_db/
+
+# ==================================================
+# Course materials synced/ingested locally (kept out of
+# the public repo; see README for how to add your own)
+# ==================================================
+course_docs/
+
+# ==================================================
+# Thesis research / evaluation artifacts (kept locally,
+# never published -- see evaluation/README.md)
+# ==================================================
+evaluation/
+
+# ==================================================
+# Backups / temp files
+# ==================================================
+*.bak
+*.tmp
+*~
+backup/
+backups/
+
+# ==================================================
+# Local tooling directories (agent/session state, not
+# part of the published project)
+# ==================================================
+.agents/
+.codex/
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+
+# ==================================================
+# Superseded by the technical CHANGELOG.md at the repo
+# root -- kept locally as thesis-framed project history
+# ==================================================
+docs/CHANGELOG.md

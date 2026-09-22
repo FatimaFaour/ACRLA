@@ -1,0 +1,1070 @@
+/*
+ * ACRLA Moodle plugin styles.
+ *
+ * Purpose:
+ *   Provides Moodle-safe styling for the floating launcher, persistent side
+ *   panel, dashboard mastery controls, course-card buttons, and inline chapter
+ *   mastery badges.
+ *
+ * Main responsibilities:
+ *   - keep ACRLA UI visually distinct but compact inside Moodle
+ *   - apply Weak/Moderate/Strong mastery colors consistently
+ *   - avoid interfering with Moodle resource links and page scrolling
+ */
+
+/* ==========================================================
+   Theme Tokens and Launcher
+   ========================================================== */
+
+#acrla-widget {
+    font-family: Arial, Helvetica, sans-serif;
+    --acrla-red: #b20f17;
+    --acrla-red-dark: #8f0f15;
+    --acrla-weak: #ef4444;
+    --acrla-weak-text: #b91c1c;
+    --acrla-weak-bg: #fef2f2;
+    --acrla-moderate: #f4b000;
+    --acrla-moderate-text: #b45309;
+    --acrla-moderate-bg: #fffbeb;
+    --acrla-strong: #10b981;
+    --acrla-strong-text: #047857;
+    --acrla-strong-bg: #ecfdf5;
+    --acrla-ink: #172033;
+    --acrla-muted: #667085;
+    --acrla-line: #e7eaf0;
+    --acrla-soft: #f8fafc;
+}
+
+/* ==========================================================
+   Moodle Course and Dashboard Mastery Controls
+   ========================================================== */
+/* Mastery colors are consistent across dashboard cards, inline chapter buttons,
+   panel rows, and legends:
+   weak < 50, moderate 50-79, strong >= 80. */
+
+#acrla-launcher {
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    z-index: 9999;
+    min-width: 72px;
+    height: 48px;
+    padding: 0 16px;
+    border: 0;
+    border-radius: 24px;
+    background: var(--acrla-red);
+    color: #fff;
+    font-weight: 700;
+    box-shadow: 0 14px 30px rgba(178, 15, 23, 0.28);
+    cursor: pointer;
+}
+
+#acrla-launcher:hover,
+#acrla-launcher:focus {
+    background: var(--acrla-red-dark);
+    outline: 2px solid rgba(155, 23, 27, 0.25);
+    outline-offset: 3px;
+}
+
+#acrla-remediation-link {
+    position: fixed;
+    right: 24px;
+    bottom: 84px;
+    z-index: 9999;
+    display: block;
+    max-width: 280px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    background: #fff;
+    color: #7f1115;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.3;
+    text-decoration: none;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+#acrla-widget #acrla-remediation-link {
+    display: none !important;
+}
+
+#acrla-remediation-link:hover,
+#acrla-remediation-link:focus {
+    color: #5f0c0f;
+    text-decoration: underline;
+    outline: 2px solid rgba(155, 23, 27, 0.25);
+    outline-offset: 3px;
+}
+
+#acrla-material-sync {
+    position: fixed;
+    right: 24px;
+    bottom: 146px;
+    z-index: 9999;
+    display: block;
+    max-width: 280px;
+    padding: 10px 14px;
+    border: 0;
+    border-radius: 8px;
+    background: #fff;
+    color: #24415f;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.3;
+    text-align: left;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    cursor: pointer;
+}
+
+#acrla-material-sync:hover,
+#acrla-material-sync:focus {
+    color: #132c45;
+    text-decoration: underline;
+    outline: 2px solid rgba(36, 65, 95, 0.25);
+    outline-offset: 3px;
+}
+
+#acrla-material-sync:disabled {
+    cursor: wait;
+    opacity: 0.7;
+}
+
+#acrla-grade-remediation {
+    position: fixed;
+    right: 24px;
+    bottom: 204px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 280px;
+    padding: 10px;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    max-height: none !important;
+    overflow: visible !important;
+    overflow-y: visible !important;
+}
+
+#acrla-grade-remediation strong {
+    color: #7f1115;
+    font-size: 12px;
+    line-height: 1.2;
+}
+
+.acrla-grade-link {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    padding: 7px 8px;
+    border: 1px solid var(--acrla-line);
+    border-radius: 12px;
+    background: #fff;
+    color: var(--acrla-ink);
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.acrla-grade-link span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.acrla-grade-link strong {
+    flex: 0 0 auto;
+    color: var(--acrla-status-color, var(--acrla-red));
+    font-weight: 800;
+}
+
+.acrla-grade-link:hover,
+.acrla-grade-link:focus {
+    border-color: #9b171b;
+    outline: 2px solid rgba(155, 23, 27, 0.18);
+    outline-offset: 2px;
+}
+
+.acrla-dashboard-widget #acrla-grade-remediation .acrla-dashboard-course-button {
+    display: none;
+}
+
+.acrla-course-card-button {
+    margin-top: 18px;
+    max-width: 100%;
+}
+
+
+#acrla-panel {
+    position: fixed;
+    right: 24px;
+    top: 92px;
+    z-index: 10000;
+    display: none;
+    flex-direction: column;
+    width: min(520px, calc(100vw - 32px));
+    height: min(820px, calc(100vh - 120px));
+    max-height: calc(100vh - 120px);
+    overflow: hidden;
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 24px 70px rgba(17, 24, 39, 0.30);
+}
+
+#acrla-panel.acrla-open {
+    display: flex;
+}
+
+#acrla-panel.acrla-chat-direct #acrla-mastery-overview {
+    display: none !important;
+}
+
+#acrla-panel.acrla-chat-direct #acrla-frame {
+    flex: 1 1 auto;
+}
+
+#acrla-panel.acrla-chat-direct {
+    height: min(760px, calc(100vh - 120px));
+}
+
+#acrla-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 58px;
+    padding: 12px 18px;
+    background: linear-gradient(135deg, var(--acrla-red), var(--acrla-red-dark));
+    color: #fff;
+}
+
+#acrla-panel-header strong {
+    display: block;
+    font-size: 22px;
+    line-height: 1.1;
+}
+
+#acrla-panel-header span:not(#acrla-sync-status) {
+    display: block;
+    margin-top: 2px;
+    font-size: 12px;
+    font-weight: 700;
+    opacity: 0.95;
+}
+
+#acrla-sync-status {
+    display: block;
+    margin-top: 2px;
+    font-size: 11px;
+    font-weight: 400;
+    opacity: 0.85;
+}
+
+#acrla-close {
+    width: 32px;
+    height: 32px;
+    border: 1px solid rgba(255, 255, 255, 0.45);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+#acrla-close:hover,
+#acrla-close:focus {
+    background: rgba(255, 255, 255, 0.18);
+    outline: none;
+}
+
+#acrla-frame {
+    flex: 1;
+    width: 100%;
+    min-height: 0;
+    border: 0;
+    background: #fff;
+}
+
+.acrla-mastery-weak {
+    --acrla-status-color: var(--acrla-weak);
+    --acrla-status-text: var(--acrla-weak-text);
+    --acrla-status-bg: var(--acrla-weak-bg);
+}
+
+.acrla-mastery-moderate {
+    --acrla-status-color: var(--acrla-moderate);
+    --acrla-status-text: var(--acrla-moderate-text);
+    --acrla-status-bg: var(--acrla-moderate-bg);
+}
+
+.acrla-mastery-strong {
+    --acrla-status-color: var(--acrla-strong);
+    --acrla-status-text: var(--acrla-strong-text);
+    --acrla-status-bg: var(--acrla-strong-bg);
+}
+
+.acrla-status-dot {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--acrla-status-color);
+    box-shadow: 0 0 0 3px var(--acrla-status-bg);
+}
+
+.acrla-mastery-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    width: fit-content;
+    padding: 4px 9px;
+    border: 1px solid color-mix(in srgb, var(--acrla-status-color) 24%, transparent);
+    border-radius: 999px;
+    background: var(--acrla-status-bg);
+    color: var(--acrla-status-text);
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.acrla-overall-mastery-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    width: min(240px, 100%);
+    margin: 10px 0 18px;
+    padding: 20px 24px;
+    border: 1px solid var(--acrla-line);
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 8px 24px rgba(17, 24, 39, 0.09);
+    cursor: pointer;
+    text-align: center;
+    transition: transform 150ms ease, box-shadow 150ms ease;
+}
+
+.acrla-overall-mastery-card:hover,
+.acrla-overall-mastery-card:focus {
+    transform: translateY(-2px);
+    box-shadow: 0 14px 32px rgba(17, 24, 39, 0.14);
+    outline: none;
+}
+
+.acrla-overall-mastery-card .acrla-overall-title {
+    color: var(--acrla-ink);
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.acrla-overall-mastery-card .acrla-overall-score {
+    color: var(--acrla-status-color);
+    font-size: 32px;
+    font-weight: 900;
+    line-height: 1;
+    letter-spacing: -0.5px;
+}
+
+.acrla-overall-mastery-card .acrla-overall-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--acrla-status-text);
+}
+
+.acrla-course-card-button {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 6px 12px;
+    position: relative;
+    width: 100%;
+    margin-top: 18px;
+    padding: 14px 70px 14px 16px;
+    border: 1px solid var(--acrla-line);
+    border-radius: 0 0 12px 12px;
+    background: linear-gradient(180deg, #fff, var(--acrla-status-bg));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.acrla-course-card-button:hover,
+.acrla-course-card-button:focus {
+    transform: translateY(-1px);
+    border-color: color-mix(in srgb, var(--acrla-status-color) 40%, var(--acrla-line));
+    box-shadow: 0 10px 24px rgba(17, 24, 39, 0.10);
+}
+
+.acrla-card-label {
+    grid-column: 1 / -1;
+    color: var(--acrla-ink);
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.acrla-card-score {
+    justify-self: start;
+    color: var(--acrla-status-color);
+    font-size: 24px;
+    line-height: 1;
+    letter-spacing: 0;
+}
+
+#acrla-overall-mastery-card.acrla-overall-mastery-card {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    gap: 8px !important;
+    width: min(240px, 100%) !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    height: auto !important;
+    padding: 20px 24px !important;
+    border-radius: 16px !important;
+    background: #fff !important;
+    border: 1px solid var(--acrla-line, #e7eaf0) !important;
+    box-shadow: 0 8px 24px rgba(17, 24, 39, 0.09) !important;
+    cursor: pointer !important;
+    text-align: center !important;
+}
+
+#acrla-overall-mastery-card.acrla-mastery-weak .acrla-overall-score,
+#acrla-overall-mastery-card.acrla-mastery-weak .acrla-overall-status {
+    color: #d92d20 !important;
+}
+
+#acrla-overall-mastery-card.acrla-mastery-weak .acrla-status-dot {
+    background-color: #d92d20 !important;
+    box-shadow: 0 0 0 3px #fff1f0 !important;
+}
+
+#acrla-overall-mastery-card.acrla-mastery-moderate .acrla-overall-score,
+#acrla-overall-mastery-card.acrla-mastery-moderate .acrla-overall-status {
+    color: #d97706 !important;
+}
+
+#acrla-overall-mastery-card.acrla-mastery-moderate .acrla-status-dot {
+    background-color: #d97706 !important;
+    box-shadow: 0 0 0 3px #fffbeb !important;
+}
+
+#acrla-overall-mastery-card.acrla-mastery-strong .acrla-overall-score,
+#acrla-overall-mastery-card.acrla-mastery-strong .acrla-overall-status {
+    color: #059669 !important;
+}
+
+#acrla-overall-mastery-card.acrla-mastery-strong .acrla-status-dot {
+    background-color: #059669 !important;
+    box-shadow: 0 0 0 3px #ecfdf5 !important;
+}
+
+#acrla-panel:not(.acrla-chat-direct) #acrla-frame {
+    display: none !important;
+    flex: 0 !important;
+}
+
+#acrla-widget .acrla-course-card-button strong,
+#acrla-widget .acrla-course-card-button .acrla-score-value,
+#acrla-widget .acrla-grade-link strong,
+#acrla-widget .acrla-grade-link .acrla-score-value,
+#acrla-widget .acrla-overview-row strong,
+#acrla-widget .acrla-overview-row .acrla-score-value,
+#acrla-widget .acrla-overview-summary strong,
+#acrla-widget .acrla-overview-summary .acrla-score-value {
+    color: var(--acrla-status-text) !important;
+}
+
+#acrla-widget .acrla-mastery-weak strong,
+#acrla-widget .acrla-mastery-weak .acrla-score-value {
+    color: #b91c1c !important;
+}
+
+#acrla-widget .acrla-mastery-moderate strong,
+#acrla-widget .acrla-mastery-moderate .acrla-score-value {
+    color: #d97706 !important;
+}
+
+#acrla-widget .acrla-mastery-strong strong,
+#acrla-widget .acrla-mastery-strong .acrla-score-value {
+    color: #059669 !important;
+}
+
+#acrla-widget .acrla-course-card-button .acrla-card-score,
+#acrla-widget .acrla-course-card-button .acrla-score-value {
+    font-size: 24px !important;
+    line-height: 1.05 !important;
+    font-weight: 800 !important;
+}
+
+#acrla-widget .acrla-grade-link:not(.acrla-course-card-button) .acrla-score-value,
+#acrla-widget .acrla-grade-link:not(.acrla-course-card-button) strong {
+    font-size: 14px !important;
+}
+
+#acrla-widget .acrla-mastery-badge {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    padding: 5px 10px !important;
+    border-radius: 999px !important;
+    background: var(--acrla-status-bg) !important;
+    color: var(--acrla-status-text) !important;
+    border: 1px solid var(--acrla-status-color) !important;
+    font-weight: 800 !important;
+}
+
+#acrla-widget .acrla-mastery-badge .acrla-status-dot,
+#acrla-widget .acrla-status-dot {
+    background-color: var(--acrla-status-color) !important;
+}
+
+#acrla-widget .acrla-mastery-weak .acrla-status-dot {
+    background-color: #ef4444 !important;
+}
+
+#acrla-widget .acrla-mastery-moderate .acrla-status-dot {
+    background-color: #f59e0b !important;
+}
+
+#acrla-widget .acrla-mastery-strong .acrla-status-dot {
+    background-color: #10b981 !important;
+}
+
+.acrla-card-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+    color: #0b64d8;
+    font-weight: 700;
+    font-size: 13px;
+}
+
+.acrla-action-icon {
+    display: inline-grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 7px;
+    background: #eff6ff;
+    font-size: 14px;
+}
+
+.acrla-course-card-assistant-button {
+    position: absolute !important;
+    right: 18px !important;
+    bottom: 46px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 0 !important;
+    width: 46px !important;
+    height: 46px !important;
+    min-width: 46px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    border-radius: 999px !important;
+    background: linear-gradient(180deg, #b80f16 0%, #980b10 100%) !important;
+    color: #ffffff !important;
+    font-weight: 700 !important;
+    font-size: 0 !important;
+    line-height: 1.2 !important;
+    text-align: center !important;
+    text-decoration: none !important;
+    box-shadow: 0 8px 18px rgba(152, 11, 16, 0.28) !important;
+    cursor: pointer !important;
+}
+
+.acrla-course-card-assistant-button:hover,
+.acrla-course-card-assistant-button:focus {
+    background: linear-gradient(180deg, #c9151c 0%, #8f090e 100%) !important;
+    color: #ffffff !important;
+    text-decoration: none !important;
+    outline: 2px solid rgba(184, 15, 22, 0.25) !important;
+    outline-offset: 2px !important;
+}
+
+.acrla-course-card-assistant-button .acrla-bot-icon {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    color: #ffffff !important;
+    filter: none !important;
+    font-size: 20px !important;
+    line-height: 1 !important;
+}
+
+.acrla-course-card-assistant-button span {
+    color: #ffffff !important;
+    text-decoration: none !important;
+}
+
+.acrla-course-card-assistant-button span:not(.acrla-bot-icon) {
+    display: none !important;
+}
+
+.coursebox,
+.dashboard-card,
+.card,
+.course-card {
+    position: relative;
+}
+
+.acrla-inline-remediation {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    margin-left: 10px !important;
+    vertical-align: middle !important;
+    flex-wrap: wrap !important;
+}
+
+.acrla-inline-remediation-button {
+    display: none !important;
+}
+
+.acrla-inline-chapter-open {
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    margin-left: 10px !important;
+    border: none !important;
+    background: transparent !important;
+    padding: 0 !important;
+    cursor: pointer !important;
+    pointer-events: auto !important;
+    position: relative !important;
+    z-index: 50 !important;
+    box-shadow: none !important;
+    text-decoration: none !important;
+}
+
+.acrla-inline-chapter-open:hover .acrla-inline-score,
+.acrla-inline-chapter-open:focus .acrla-inline-score {
+    text-decoration: underline !important;
+    opacity: 0.85 !important;
+}
+
+.acrla-inline-chapter-open .acrla-inline-score {
+    margin: 0 !important;
+    font-size: 15px !important;
+    font-weight: 900 !important;
+}
+
+.acrla-inline-chapter-open.acrla-mastery-weak .acrla-inline-score {
+    color: #d92d20 !important;
+}
+
+.acrla-inline-chapter-open.acrla-mastery-moderate .acrla-inline-score {
+    color: #d97706 !important;
+}
+
+.acrla-inline-chapter-open.acrla-mastery-strong .acrla-inline-score {
+    color: #059669 !important;
+}
+
+.acrla-inline-score {
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    border: none !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 0 0 10px !important;
+    font-size: 14px !important;
+    font-weight: 900 !important;
+    line-height: 1 !important;
+    cursor: pointer !important;
+    pointer-events: auto !important;
+    position: relative !important;
+    z-index: 20 !important;
+    text-decoration: none !important;
+    box-shadow: none !important;
+}
+
+.acrla-inline-score:hover,
+.acrla-inline-score:focus {
+    text-decoration: underline !important;
+    opacity: 0.85 !important;
+    outline: none !important;
+}
+
+.acrla-inline-score.acrla-mastery-weak {
+    color: #d92d20 !important;
+}
+
+.acrla-inline-score.acrla-mastery-moderate {
+    color: #d97706 !important;
+}
+
+.acrla-inline-score.acrla-mastery-strong {
+    color: #059669 !important;
+}
+
+.acrla-inline-badge {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 5px !important;
+    border-radius: 999px !important;
+    padding: 4px 9px !important;
+    font-size: 12px !important;
+    font-weight: 800 !important;
+    line-height: 1 !important;
+    white-space: nowrap !important;
+}
+
+.acrla-inline-badge.acrla-mastery-weak {
+    color: #d92d20 !important;
+    border: 1px solid #ffb4ad !important;
+    background: #fff1f0 !important;
+}
+
+.acrla-inline-badge.acrla-mastery-moderate {
+    color: #d97706 !important;
+    border: 1px solid #f9c56b !important;
+    background: #fff7e6 !important;
+}
+
+.acrla-inline-badge.acrla-mastery-strong {
+    color: #15803d !important;
+    border: 1px solid #86efac !important;
+    background: #f0fdf4 !important;
+}
+
+.acrla-inline-badge .acrla-status-dot {
+    width: 8px !important;
+    height: 8px !important;
+    box-shadow: none !important;
+}
+
+.acrla-row-icon {
+    display: inline-grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    flex: 0 0 auto;
+    border-radius: 50%;
+    background: var(--acrla-status-bg);
+    color: var(--acrla-status-text);
+    font-weight: 900;
+}
+
+.acrla-row-icon-chapter {
+    background: #f1edff;
+    color: #7c3aed;
+}
+
+.acrla-row-title {
+    min-width: 0;
+    overflow: hidden;
+    color: #0b64d8;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.acrla-chevron {
+    color: #64748b;
+    font-size: 22px;
+    line-height: 1;
+}
+
+.acrla-mastery-legend {
+    clear: both;
+    margin: 28px 0 20px;
+    padding: 22px 28px;
+    border: 1px solid var(--acrla-line);
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 12px 30px rgba(17, 24, 39, 0.07);
+}
+
+.acrla-mastery-legend h3 {
+    margin: 0 0 18px;
+    color: var(--acrla-ink);
+    font-size: 16px;
+}
+
+.acrla-legend-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(120px, 1fr));
+    gap: 18px;
+}
+
+.acrla-legend-item {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 10px;
+    align-items: center;
+    padding: 10px 12px;
+    border: 1px solid color-mix(in srgb, var(--acrla-status-color) 20%, var(--acrla-line));
+    border-radius: 12px;
+    background: var(--acrla-status-bg);
+}
+
+.acrla-legend-item em {
+    grid-column: 2;
+    color: var(--acrla-status-text);
+    font-style: normal;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.acrla-legend-item.acrla-mastery-weak .acrla-status-dot,
+.acrla-mastery-weak > .acrla-status-dot {
+    background-color: #ef4444 !important;
+}
+
+.acrla-legend-item.acrla-mastery-moderate .acrla-status-dot,
+.acrla-mastery-moderate > .acrla-status-dot {
+    background-color: #f59e0b !important;
+}
+
+.acrla-legend-item.acrla-mastery-strong .acrla-status-dot,
+.acrla-mastery-strong > .acrla-status-dot {
+    background-color: #10b981 !important;
+}
+
+.acrla-legend-item.acrla-mastery-weak strong {
+    color: #b91c1c !important;
+}
+
+.acrla-legend-item.acrla-mastery-moderate strong {
+    color: #d97706 !important;
+}
+
+.acrla-legend-item.acrla-mastery-strong strong {
+    color: #059669 !important;
+}
+
+#acrla-mastery-overview {
+    max-height: min(560px, 58vh);
+    overflow-y: auto;
+    padding: 16px 16px 12px;
+    background: #fff;
+    border-bottom: 1px solid var(--acrla-line);
+}
+
+.acrla-chapter-remediation,
+.acrla-chapter-remediation-list,
+.acrla-course-chapter-list,
+#acrla-grade-remediation {
+    max-height: none !important;
+    overflow: visible !important;
+    overflow-y: visible !important;
+}
+
+.acrla-overview-section {
+    margin-bottom: 18px;
+}
+
+.acrla-overview-section h3 {
+    margin: 0 0 10px;
+    color: var(--acrla-ink);
+    font-size: 15px;
+    font-weight: 800;
+}
+
+.acrla-overview-summary,
+.acrla-overview-row {
+    border: 1px solid var(--acrla-line);
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 8px 22px rgba(17, 24, 39, 0.07);
+}
+
+.acrla-overview-summary {
+    display: grid;
+    grid-template-columns: 70px 1fr;
+    gap: 14px;
+    align-items: center;
+    padding: 13px;
+    background: linear-gradient(180deg, #fff, var(--acrla-status-bg));
+}
+
+.acrla-overview-summary span {
+    color: var(--acrla-ink);
+    font-weight: 700;
+}
+
+.acrla-overview-summary strong {
+    display: block;
+    margin: 4px 0 6px;
+    color: var(--acrla-status-color);
+    font-size: 24px;
+    line-height: 1;
+}
+
+.acrla-ring {
+    width: 58px;
+    height: 58px;
+    border-radius: 50%;
+    background:
+        radial-gradient(circle at center, #fff 58%, transparent 60%),
+        conic-gradient(var(--acrla-status-color) var(--acrla-angle), #e5e7eb 0);
+}
+
+.acrla-overview-list {
+    display: grid;
+    gap: 8px;
+}
+
+.acrla-overview-row {
+    display: grid;
+    grid-template-columns: 38px minmax(0, 1fr) auto auto 16px;
+    gap: 10px;
+    align-items: center;
+    width: 100%;
+    padding: 9px 11px;
+    color: var(--acrla-ink);
+    text-align: left;
+    cursor: pointer;
+    background: linear-gradient(180deg, #fff, var(--acrla-status-bg));
+    transition: transform 150ms ease, box-shadow 150ms ease, border-color 150ms ease;
+}
+
+.acrla-overview-row:hover,
+.acrla-overview-row:focus {
+    transform: translateY(-1px);
+    border-color: color-mix(in srgb, var(--acrla-status-color) 30%, var(--acrla-line));
+    box-shadow: 0 10px 24px rgba(17, 24, 39, 0.10);
+    outline: none;
+}
+
+.acrla-overview-row strong {
+    color: var(--acrla-status-text);
+    font-size: 13px;
+}
+
+.acrla-overview-chapter .acrla-row-title {
+    color: var(--acrla-ink);
+    font-weight: 600;
+}
+
+.acrla-overview-open {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 46px;
+    margin-top: 12px;
+    border: 0;
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--acrla-red), var(--acrla-red-dark));
+    color: #fff;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 12px 24px rgba(178, 15, 23, 0.22);
+}
+
+.acrla-overview-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    margin-top: 12px;
+    color: var(--acrla-muted);
+    font-size: 11px;
+}
+
+.acrla-overview-legend strong {
+    flex-basis: 100%;
+    color: var(--acrla-ink);
+    font-size: 12px;
+}
+
+.acrla-overview-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: var(--acrla-status-bg);
+    color: var(--acrla-status-text);
+    font-weight: 700;
+}
+
+.acrla-card-arrow,
+.acrla-row-arrow,
+.acrla-chevron,
+.acrla-overview-open,
+.acrla-overview-open-assistant {
+    display: none !important;
+}
+
+.acrla-panel-overview-only {
+    height: auto !important;
+    max-height: calc(100vh - 120px) !important;
+}
+
+.acrla-panel-overview-only .acrla-chat-frame,
+.acrla-panel-overview-only iframe,
+.acrla-panel-overview-only .acrla-panel-chat {
+    display: none !important;
+    height: 0 !important;
+    min-height: 0 !important;
+}
+
+@media (max-width: 600px) {
+    #acrla-launcher {
+        right: 16px;
+        bottom: 16px;
+    }
+
+    #acrla-remediation-link {
+        right: 16px;
+        bottom: 76px;
+        max-width: calc(100vw - 32px);
+    }
+
+    #acrla-material-sync {
+        right: 16px;
+        bottom: 138px;
+        max-width: calc(100vw - 32px);
+    }
+
+    #acrla-grade-remediation {
+        right: 16px;
+        bottom: 200px;
+        width: min(280px, calc(100vw - 32px));
+        max-height: none !important;
+        overflow: visible !important;
+        overflow-y: visible !important;
+    }
+
+    #acrla-panel {
+        top: 12px;
+        right: 12px;
+        bottom: 12px;
+        left: 12px;
+        width: auto;
+        height: auto;
+        max-height: none;
+    }
+
+    .acrla-legend-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .acrla-overview-row {
+        grid-template-columns: 34px minmax(0, 1fr) auto;
+    }
+
+    .acrla-overview-row .acrla-mastery-badge,
+    .acrla-overview-row .acrla-chevron {
+        display: none;
+    }
+}

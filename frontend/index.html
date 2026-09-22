@@ -1,0 +1,1538 @@
+<!DOCTYPE html>
+<!--
+  ACRLA standalone and embedded chat UI.
+
+  Purpose:
+    Provides the browser chat experience used directly at the FastAPI root and
+    inside the Moodle iframe side panel.
+
+  Main responsibilities:
+    - start/resume ACRLA sessions from Moodle query parameters
+    - render chat messages, source citations, and automatic routing badges
+    - keep difficulty selection and Quick Progress Check controls usable
+    - support embedded mode without duplicating the Moodle panel header
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ACRLA — Learning Assistant Demo</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<style>
+  /* ==========================================================
+     Base Layout and Embedded Moodle Mode
+     ========================================================== */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+         background: #f5f0f0; min-height: 100vh; display: flex;
+         flex-direction: column; align-items: center; justify-content: center; }
+  body.acrla-embedded-mode {
+    background: #fff; min-height: 100vh; justify-content: stretch;
+  }
+  body.acrla-embedded-mode > h1,
+  body.acrla-embedded-mode > .subtitle,
+  body.acrla-embedded-mode > #config-panel {
+    display: none !important;
+  }
+  body.acrla-embedded-mode #chat-container {
+    width: 100%; height: 100vh; border-radius: 0; box-shadow: none;
+  }
+  body.acrla-embedded-mode #chat-header {
+    display: none !important;
+  }
+  .difficulty-inline {
+    display: none;
+  }
+  body.acrla-embedded-mode .bar {
+    flex-wrap: wrap;
+  }
+  body.acrla-embedded-mode .difficulty-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 8px;
+    font-size: 12px;
+    color: #555;
+  }
+  body.acrla-embedded-mode #diff-select {
+    width: auto !important;
+    min-width: 92px;
+    background: #fff !important;
+    color: #333 !important;
+    border: 1px solid #ccc !important;
+    border-radius: 12px !important;
+    padding: 3px 9px !important;
+    font-size: 12px !important;
+  }
+  h1 { color: #8B1A1A; font-size: 22px; margin-bottom: 4px; }
+  .subtitle { color: #666; font-size: 13px; margin-bottom: 20px; }
+  #chat-container {
+    width: 420px; background: #fff; border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.12); display: flex; flex-direction: column;
+    overflow: hidden; height: 620px;
+  }
+  #chat-header {
+    background: #8B1A1A; color: #fff; padding: 14px 18px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  #chat-header h2 { font-size: 16px; font-weight: 600; }
+  #chat-status { font-size: 11px; opacity: 0.8; margin-top: 2px; }
+  .bar {
+    padding: 7px 14px; background: #f9f5f5; border-bottom: 1px solid #eee;
+    display: flex; gap: 8px; align-items: center; font-size: 12px; color: #666;
+  }
+  .auto-route-label {
+    padding: 3px 10px; border-radius: 12px; border: 1px solid #ddd;
+    background: #fff; color: #555; font-size: 12px; font-weight: 600;
+  }
+
+  /* ==========================================================
+     Chat Messages and Source Display
+     ========================================================== */
+  .progress { flex: 1; height: 5px; background: #ddd; border-radius: 3px; overflow: hidden; }
+  .progress-fill { height: 100%; background: #8B1A1A; border-radius: 3px; transition: width 0.4s; }
+  .progress-fill.mastery-weak { background: #d92d20; }
+  .progress-fill.mastery-moderate { background: #d97706; }
+  .progress-fill.mastery-strong { background: #059669; }
+  #messages {
+    flex: 1; overflow-y: auto; padding: 14px; display: flex;
+    flex-direction: column; gap: 10px;
+  }
+  .msg { max-width: 85%; padding: 10px 13px; border-radius: 12px;
+         font-size: 14px; line-height: 1.55; overflow-wrap: anywhere; word-break: break-word; }
+  .msg.user { background: #8B1A1A; color: #fff; align-self: flex-end;
+              border-bottom-right-radius: 3px; }
+  .msg.bot  { background: #f0f0f0; color: #222; align-self: flex-start;
+              border-bottom-left-radius: 3px; }
+  .msg .sources { font-size: 11px; color: #888; margin-top: 5px; }
+
+  /* ==========================================================
+     Assistant message typography -- comfortable reading at the narrow
+     (~350-500px) Moodle side-panel width: real paragraphs/headings/lists
+     instead of one run-on block, compact spacing, no huge vertical gaps.
+     ========================================================== */
+  .msg p { margin: 0 0 8px; }
+  .msg p:last-child { margin-bottom: 0; }
+  .msg h4 + p, .msg p + h4 { margin-top: 2px; }
+  .msg ol { margin: 4px 0 6px 18px; padding: 0; }
+  .msg ol li, .msg ul li { margin: 2px 0; padding-left: 2px; }
+  .msg em { font-style: italic; }
+  .typing { display: flex; gap: 4px; padding: 10px 13px; }
+  .typing span { width: 7px; height: 7px; background: #bbb; border-radius: 50%;
+                 animation: bounce 1s infinite; }
+  .typing span:nth-child(2) { animation-delay: 0.15s; }
+  .typing span:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-6px)} }
+  #input-row {
+    padding: 10px 12px; border-top: 1px solid #eee;
+    display: flex; gap: 8px; align-items: center;
+  }
+  #msg-input {
+    flex: 1; border: 1px solid #ddd; border-radius: 20px;
+    padding: 9px 14px; font-size: 14px; outline: none;
+  }
+  #msg-input:focus { border-color: #8B1A1A; }
+  #send-btn {
+    background: #8B1A1A; color: #fff; border: none; border-radius: 50%;
+    width: 38px; height: 38px; cursor: pointer; font-size: 17px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #config-panel {
+    position: fixed; top: 20px; right: 20px; background: #fff;
+    padding: 14px 16px; border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+    font-size: 13px; width: 220px;
+  }
+  #config-panel h3 { font-size: 13px; color: #8B1A1A; margin-bottom: 8px; }
+  #config-panel label { display: block; margin: 6px 0 2px; color: #555; }
+  #config-panel input, #config-panel select {
+    width: 100%; padding: 5px 8px; border: 1px solid #ddd; border-radius: 6px;
+    font-size: 12px;
+  }
+  #start-btn {
+    margin-top: 10px; width: 100%; padding: 7px; background: #8B1A1A;
+    color: #fff; border: none; border-radius: 8px; cursor: pointer; font-size: 13px;
+  }
+  #progress-btn {
+    margin-left: auto; padding: 5px 10px; border: 1px solid #8B1A1A;
+    background: #fff; color: #8B1A1A; border-radius: 12px; cursor: pointer;
+    font-size: 12px; font-weight: 600;
+  }
+  #progress-btn:hover { background: #8B1A1A; color: #fff; }
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.35);
+    display: flex; align-items: center; justify-content: center; z-index: 20;
+  }
+  .modal-backdrop.hidden { display: none; }
+  .assessment-card {
+    width: min(92vw, 440px); max-height: 86vh; overflow: auto;
+    background: #fff; border-radius: 14px; padding: 16px;
+    box-shadow: 0 14px 40px rgba(0,0,0,0.22);
+  }
+  .assessment-card h3 { color: #8B1A1A; font-size: 16px; margin-bottom: 8px; }
+  .assessment-question {
+    border-top: 1px solid #eee; padding: 12px 0; font-size: 13px;
+  }
+  .assessment-question p { margin-bottom: 8px; line-height: 1.45; }
+  .assessment-option {
+    display: block; margin: 7px 0; padding: 7px 8px;
+    background: #f9f5f5; border-radius: 8px; cursor: pointer;
+  }
+  .assessment-actions {
+    display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px;
+  }
+  .assessment-actions button {
+    padding: 7px 11px; border-radius: 8px; cursor: pointer; border: 1px solid #ddd;
+    background: #fff;
+  }
+  .assessment-actions .primary {
+    background: #8B1A1A; color: #fff; border-color: #8B1A1A;
+  }
+  #assessment-result { margin-top: 10px; font-size: 13px; font-weight: 600; color: #8B1A1A; }
+
+  /* ==========================================================
+     Markdown rendering inside chat bubbles
+     ========================================================== */
+  .msg code {
+    background: rgba(0,0,0,0.08); color: #8B1A1A; padding: 1px 5px;
+    border-radius: 4px; font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 12.5px;
+  }
+  .msg.user code { background: rgba(255,255,255,0.2); color: #fff; }
+  .msg h4 { font-size: 13px; font-weight: 700; color: #8B1A1A; margin: 8px 0 3px; line-height: 1.3; }
+  .msg h4:first-child { margin-top: 0; }
+  .msg ul { margin: 4px 0 4px 18px; padding: 0; }
+  .msg li { margin: 2px 0; }
+
+  /* ==========================================================
+     Math rendering (KaTeX) -- centered display math that can scroll
+     horizontally rather than overflow the narrow side panel; inline math
+     sits in the text flow at the same size as surrounding prose.
+     ========================================================== */
+  .msg .katex-block {
+    display: block; margin: 8px 0; max-width: 100%; overflow-x: auto; overflow-y: hidden;
+    text-align: center; padding: 2px 0;
+  }
+  .msg .katex { font-size: 1em; }
+  .msg .katex-display { margin: 0; }
+  .code-block-wrap { position: relative; margin: 8px 0; }
+  .code-block-wrap pre {
+    background: #1e1e1e; color: #e6e6e6; padding: 12px 12px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.5px; line-height: 1.5;
+  }
+  .code-block-wrap code {
+    background: transparent; color: inherit; padding: 0; border-radius: 0;
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  }
+  .copy-btn {
+    position: absolute; top: 6px; right: 6px; background: rgba(255,255,255,0.12);
+    color: #ddd; border: 1px solid rgba(255,255,255,0.25); border-radius: 6px;
+    padding: 2px 8px; font-size: 11px; cursor: pointer;
+  }
+  .copy-btn:hover { background: rgba(255,255,255,0.22); }
+
+  /* ==========================================================
+     MCQ option buttons
+     ========================================================== */
+  .mcq-options { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+  .mcq-option {
+    text-align: left; background: #fff; border: 1.5px solid #8B1A1A; color: #8B1A1A;
+    border-radius: 18px; padding: 7px 13px; font-size: 13px; font-weight: 500;
+    cursor: pointer; transition: background 0.15s, color 0.15s;
+  }
+  .mcq-option:hover:not(:disabled) { background: #fbeaea; }
+  .mcq-option:disabled { cursor: default; opacity: 0.6; }
+  .mcq-option.mcq-selected {
+    background: #8B1A1A; color: #fff; opacity: 1; border-color: #8B1A1A;
+  }
+  .practice-tip { font-size: 11.5px; color: #777; font-style: italic; margin-top: 6px; }
+
+  /* ==========================================================
+     Tutor state badge
+     ========================================================== */
+  .tutor-state-badge {
+    display: none; align-items: center; gap: 5px; align-self: flex-start;
+    margin: 6px 14px 0; padding: 3px 11px; border-radius: 12px;
+    font-size: 11.5px; font-weight: 600; background: #eee; color: #555; width: fit-content;
+  }
+  .tutor-badge-explain { background: #eaf1fb; color: #2c5ea8; }
+  .tutor-badge-example { background: #fdf3e0; color: #a86a12; }
+  .tutor-badge-practice { background: #f2eaf9; color: #6b3fa0; }
+  .tutor-badge-feedback { background: #e6f6ec; color: #1c7a3d; }
+  .tutor-badge-progress { background: #fbeaea; color: #8B1A1A; }
+
+  /* ==========================================================
+     Per-message tutor-state presentation: a small "eyebrow" label above
+     the content (section 5), plus a distinctive tinted card for EXAMPLE
+     and a fresh GUIDED_PRACTICE question (section 3/8) -- purely visual,
+     driven only by the backend's structured tutor_state field, never by
+     parsing the reply text.
+     ========================================================== */
+  .tutor-msg-eyebrow {
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+    margin-bottom: 5px; display: flex; align-items: center; gap: 4px; overflow-wrap: anywhere;
+  }
+  .msg.bot.tutor-card-example, .msg.bot.tutor-card-practice {
+    padding: 11px 13px 12px; border: 1px solid transparent; max-width: 92%;
+  }
+  .msg.bot.tutor-card-example { background: #fffaf1; border-color: #f3e2bd; }
+  .msg.bot.tutor-card-example .tutor-msg-eyebrow { color: #a86a12; }
+  .msg.bot.tutor-card-practice { background: #faf6ff; border-color: #e4d6f7; }
+  .msg.bot.tutor-card-practice .tutor-msg-eyebrow { color: #6b3fa0; }
+
+  /* ==========================================================
+     Correct / wrong feedback styling
+     ========================================================== */
+  .msg.bot.msg-correct { border-left: 4px solid #059669; padding-left: 10px; }
+  .msg.bot.msg-wrong { border-left: 4px solid #d92d20; padding-left: 10px; }
+  .feedback-icon { display: inline-block; margin-right: 4px; animation: feedback-pop 0.4s ease; }
+  @keyframes feedback-pop {
+    0% { transform: scale(0.4); opacity: 0; }
+    60% { transform: scale(1.15); opacity: 1; }
+    100% { transform: scale(1); }
+  }
+
+  /* ==========================================================
+     Session practice progress row
+     ========================================================== */
+  .practice-progress-row {
+    align-self: flex-start; margin-top: -2px; font-size: 12px; color: #555;
+    background: #f5f0f0; border-radius: 8px; padding: 4px 10px;
+  }
+
+  /* ==========================================================
+     Source citation badge
+     ========================================================== */
+  .source-badge-row { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 5px; }
+  .source-badge {
+    display: inline-block; background: #eee; color: #666; font-size: 10.5px;
+    padding: 2px 8px; border-radius: 10px; font-weight: 500;
+  }
+
+  /* ==========================================================
+     "Check my progress" pulse
+     ========================================================== */
+  #progress-btn.pulse { animation: progress-pulse 1.5s ease-in-out infinite; }
+  @keyframes progress-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(139,26,26,0.45); }
+    50% { box-shadow: 0 0 0 6px rgba(139,26,26,0); }
+  }
+
+  /* ==========================================================
+     Difficulty selector dot
+     ========================================================== */
+  .diff-select-wrap { display: flex; align-items: center; gap: 6px; }
+  .difficulty-dot {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.25);
+  }
+  .difficulty-dot-easy { background: #059669; }
+  .difficulty-dot-medium { background: #d97706; }
+  .difficulty-dot-hard { background: #d92d20; }
+
+  /* ==========================================================
+     Proactive remediation focus card -- one-time "today's focus" card
+     shown above the bot bubble on a bootstrap turn only (never every turn).
+     Kept compact/narrow-panel-safe: no min-width, wraps long names cleanly.
+     ========================================================== */
+  .focus-card {
+    align-self: stretch; margin: 0; padding: 10px 12px; border-radius: 10px;
+    background: #fdf3f3; border: 1px solid #f0d4d4; border-left: 4px solid #8B1A1A;
+    max-width: 100%;
+  }
+  .focus-card-eyebrow {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.06em; color: #8B1A1A;
+    text-transform: uppercase; margin-bottom: 4px;
+  }
+  .focus-card-concept {
+    font-size: 15px; font-weight: 700; color: #222; line-height: 1.3;
+    overflow-wrap: anywhere; word-break: break-word;
+  }
+  .focus-card-course {
+    font-size: 12px; color: #777; margin-top: 1px;
+    overflow-wrap: anywhere; word-break: break-word;
+  }
+  .focus-card-mastery-row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-top: 8px; font-size: 12px; color: #555; gap: 8px;
+  }
+  .focus-card-mastery-row strong { font-size: 14px; color: #8B1A1A; white-space: nowrap; }
+  .focus-card-reason { font-size: 11.5px; color: #888; margin-top: 2px; }
+
+  /* ==========================================================
+     Next-action CTA -- convenience UI only. Sends the same natural-
+     language request through the existing chat pipeline; never a second
+     tutoring system, never a mastery update.
+     ========================================================== */
+  .tutor-cta-row { align-self: flex-start; margin-top: -2px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .tutor-cta-btn {
+    background: #fff; border: 1.5px solid #8B1A1A; color: #8B1A1A; border-radius: 16px;
+    padding: 6px 13px; font-size: 12.5px; font-weight: 600; cursor: pointer; max-width: 100%;
+  }
+  .tutor-cta-btn:hover:not(:disabled) { background: #fbeaea; }
+  .tutor-cta-btn:disabled { opacity: 0.55; cursor: default; }
+</style>
+</head>
+<body>
+
+<div id="config-panel">
+  <h3>⚙️ Test Configuration</h3>
+  <label>Backend URL</label>
+  <input id="cfg-backend" value="http://localhost:8000">
+  <label>Student ID</label>
+  <input id="cfg-student" type="number" value="1">
+  <label>Course ID</label>
+  <input id="cfg-course" type="number" value="1">
+  <label>Course Name</label>
+  <input id="cfg-coursename" value="Moodle Course">
+  <label>Weak Concepts (comma-sep)</label>
+  <input id="cfg-weak" value="">
+  <button id="start-btn" onclick="initSession()">Start Session</button>
+</div>
+
+<h1>ACRLA</h1>
+<p class="subtitle">Adaptive Conversational Remediation and Learning Assistant</p>
+
+<div id="chat-container">
+  <div id="chat-header">
+    <div>
+      <h2>Learning Assistant</h2>
+      <div id="chat-status">Not connected</div>
+    </div>
+    <span class="diff-select-wrap">
+      <span id="diff-dot" class="difficulty-dot difficulty-dot-medium" aria-hidden="true"></span>
+      <select id="diff-select" onchange="changeDifficulty(this.value)" style="
+        background: rgba(255,255,255,0.2);
+        color: white;
+        border: 1px solid rgba(255,255,255,0.4);
+        border-radius: 8px;
+        padding: 3px 8px;
+        font-size: 12px;
+        cursor: pointer;
+        outline: none;
+      ">
+        <option value="easy">Easy</option>
+        <option value="medium" selected>Medium (Suggested)</option>
+        <option value="hard">Hard</option>
+      </select>
+    </span>
+  </div>
+
+  <div id="tutor-badge" class="tutor-state-badge"></div>
+
+  <div class="bar">
+    <span>Course mastery:</span>
+    <div class="progress"><div class="progress-fill" id="mastery-fill" style="width:0%"></div></div>
+    <span id="mastery-pct">0%</span>
+  </div>
+
+  <div class="bar">
+    <span>Response:</span>
+    <span class="auto-route-label" id="route-label">Auto</span>
+    <span id="embedded-diff-wrap" class="difficulty-inline" aria-hidden="true">
+      <span>Difficulty:</span>
+    </span>
+    <button id="progress-btn" onclick="openAssessment()">Check my progress</button>
+  </div>
+
+  <div id="messages">
+    <div class="msg bot">👋 Click <strong>"Start Session"</strong> in the config panel to begin.</div>
+  </div>
+
+  <div id="input-row">
+    <input id="msg-input" type="text" placeholder="Ask me anything about your course..."
+           onkeydown="if(event.key==='Enter')sendMsg()">
+    <button id="send-btn" onclick="sendMsg()">➤</button>
+  </div>
+</div>
+
+<div id="assessment-modal" class="modal-backdrop hidden">
+  <div class="assessment-card">
+    <h3>Quick Progress Check</h3>
+    <div id="assessment-body">Loading assessment...</div>
+    <div id="assessment-result"></div>
+    <div class="assessment-actions">
+      <button type="button" onclick="closeAssessment()">Close</button>
+      <button type="button" class="primary" id="assessment-submit" onclick="submitAssessment()">Submit</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script>
+let sessionId = null;
+let studentId = 1;
+let masteryPct = 0;
+let selectedDifficulty = 'medium';
+let difficultyManuallySelected = false;
+let launchContext = null;
+let launchStudentName = null;
+let currentAssessment = null;
+const pageParams = new URLSearchParams(window.location.search);
+const embeddedMode = pageParams.get('embedded') === '1' || pageParams.get('hide_header') === '1';
+if (embeddedMode) {
+  document.body.classList.add('acrla-embedded-mode');
+  window.addEventListener('DOMContentLoaded', () => {
+    const wrap = document.getElementById('embedded-diff-wrap');
+    const select = document.getElementById('diff-select');
+    const dot = document.getElementById('diff-dot');
+    if (wrap && select) {
+      if (dot) wrap.appendChild(dot);
+      wrap.appendChild(select);
+      wrap.setAttribute('aria-hidden', 'false');
+    }
+  });
+}
+
+async function readJsonResponse(res) {
+  const text = await res.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    const preview = text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 180);
+    throw new Error(`HTTP ${res.status}: ${preview || res.statusText || 'Non-JSON response'}`);
+  }
+  if (!res.ok) {
+    const detail = data?.detail || data?.message || res.statusText || 'Request failed';
+    throw new Error(`HTTP ${res.status}: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
+  }
+  return data;
+}
+
+const ROUTE_LABELS = {
+  internal_rag: 'Auto • Course material',
+  external_fallback: 'Auto • External support',
+  tutor_continuation: 'Auto • Tutoring session',
+};
+
+function syncRouteLabel(pipeline) {
+  // The backend returns the actual pipeline used for the last answer. The
+  // badge is diagnostic for the demo, and must reflect whatever the backend
+  // actually classified this turn as -- never a binary guess. A pipeline
+  // value not in ROUTE_LABELS leaves the badge unchanged rather than being
+  // forced into "Course material"/"External support".
+  const label = document.getElementById('route-label');
+  const route = normalizePipeline(pipeline);
+  if (label && route) {
+    label.textContent = ROUTE_LABELS[route];
+  }
+  if (sessionId) {
+    document.getElementById('chat-status').textContent = 'Session active • automatic routing';
+  }
+}
+
+function normalizePipeline(value) {
+  const route = String(value || '').trim().toLowerCase();
+  return Object.prototype.hasOwnProperty.call(ROUTE_LABELS, route) ? route : '';
+}
+
+function masteryStatusFromScore(score) {
+  const value = Number(score || 0);
+  if (value < 50) return 'weak';
+  if (value < 80) return 'moderate';
+  return 'strong';
+}
+
+function setMasteryDisplay(score, status) {
+  const value = Number(score);
+  if (Number.isNaN(value)) return;
+  const bounded = Math.max(0, Math.min(100, value));
+  const level = ['weak', 'moderate', 'strong'].includes(String(status || '').toLowerCase())
+    ? String(status).toLowerCase()
+    : masteryStatusFromScore(bounded);
+  const fill = document.getElementById('mastery-fill');
+  masteryPct = bounded;
+  fill.style.width = `${bounded}%`;
+  fill.classList.remove('mastery-weak', 'mastery-moderate', 'mastery-strong');
+  fill.classList.add(`mastery-${level}`);
+  document.getElementById('mastery-pct').textContent = `${bounded}%`;
+}
+
+function configuredConcepts() {
+  return document.getElementById('cfg-weak').value
+    .split(',')
+    .map(value => value.trim())
+    .filter(Boolean);
+}
+
+function courseConceptScores(courseId, courseName) {
+  const scores = {};
+  configuredConcepts().forEach(concept => {
+    scores[concept] = 0.50;
+  });
+  if (launchContext?.concept) {
+    scores[launchContext.concept] = launchContext.score !== null && !Number.isNaN(launchContext.score)
+      ? (launchContext.score > 1 ? launchContext.score / 100 : launchContext.score)
+      : 0.50;
+  }
+  return scores;
+}
+
+function courseWeakConcepts(courseId, courseName, scores) {
+  return Object.entries(scores)
+    .filter(([, score]) => Number(score) < 0.6)
+    .sort((a, b) => Number(a[1]) - Number(b[1]))
+    .map(([concept]) => concept);
+}
+
+function applyLaunchParams() {
+  // Moodle passes launch context through query parameters. The same page also
+  // runs as a standalone demo, so this function only mutates config when those
+  // parameters are present.
+  const params = pageParams;
+  const source = params.get('source');
+  const student = params.get('student_id');
+  const studentName = params.get('student_name');
+  const course = params.get('course_id');
+  const courseName = params.get('course_name');
+  const backend = params.get('backend_url');
+  const concept = params.get('concept');
+  const conceptScore = params.get('score');
+  const clickedScore = params.get('clicked_score') || conceptScore;
+  const levelType = params.get('level_type');
+  const status = params.get('status');
+  console.log('[ACRLA] frontend_launch_params',
+    'level_type=' + (levelType || ''),
+    'course_id=' + (course || ''),
+    'course_name=' + (courseName || ''),
+    'concept=' + (concept || ''),
+    'score=' + (conceptScore || ''),
+    'source=' + (source || '')
+  );
+
+  if (backend) document.getElementById('cfg-backend').value = backend;
+  if (student) document.getElementById('cfg-student').value = student;
+  if (studentName) launchStudentName = studentName;
+  if (course) document.getElementById('cfg-course').value = course;
+  if (courseName) document.getElementById('cfg-coursename').value = courseName;
+  if (concept || ['overall', 'course', 'chapter'].includes(levelType)) {
+    if (concept) {
+      document.getElementById('cfg-weak').value = concept;
+    }
+    const rawScore = conceptScore ? Number(conceptScore) : null;
+    const rawClickedScore = clickedScore ? Number(clickedScore) : rawScore;
+    const scorePercent = rawScore !== null && !Number.isNaN(rawScore)
+      ? (rawScore <= 1 ? rawScore * 100 : rawScore)
+      : null;
+    const clickedScorePercent = rawClickedScore !== null && !Number.isNaN(rawClickedScore)
+      ? (rawClickedScore <= 1 ? rawClickedScore * 100 : rawClickedScore)
+      : scorePercent;
+    if (embeddedMode && clickedScorePercent !== null && !Number.isNaN(clickedScorePercent)) {
+      setMasteryDisplay(clickedScorePercent, status);
+    }
+    launchContext = {
+      concept,
+      score: scorePercent,
+      clickedScore: clickedScorePercent,
+      levelType: levelType || 'chapter',
+    };
+  }
+
+  if (source === 'moodle') {
+    document.getElementById('config-panel').style.display = 'none';
+    window.setTimeout(initSession, 150);
+  }
+}
+
+// ==========================================================
+// Session Launch and Moodle Query Parameters
+// ==========================================================
+
+async function initSession() {
+  const backend = document.getElementById('cfg-backend').value;
+  studentId = parseInt(document.getElementById('cfg-student').value);
+  const courseId = parseInt(document.getElementById('cfg-course').value);
+  const courseName = document.getElementById('cfg-coursename').value;
+  const scores = courseConceptScores(courseId, courseName);
+  if (launchContext?.concept && launchContext.score !== null && !Number.isNaN(launchContext.score)) {
+    scores[launchContext.concept] = launchContext.score > 1 ? launchContext.score / 100 : launchContext.score;
+  }
+  let weak = courseWeakConcepts(courseId, courseName, scores);
+  if (launchContext?.concept) {
+    weak = [launchContext.concept, ...weak.filter(concept => concept !== launchContext.concept)];
+  }
+  const sessionStartPayload = {
+    // The frontend includes Moodle launch context, but the backend still
+    // rebuilds and validates scope. This payload is a convenience bridge, not
+    // the source of truth for course isolation.
+    moodle_payload: {
+      student_id: studentId,
+      username: launchStudentName || 'Test Student',
+      email: 'test@example.com',
+      course_id: courseId,
+      course_name: courseName,
+      scores,
+      weak_concepts: weak,
+      learning_preferences: launchContext ? {
+        launch_concept: launchContext.concept,
+        selected_concept: launchContext.concept,
+        launch_score: launchContext.score,
+        level_type: launchContext.levelType,
+      } : {},
+    },
+    difficulty: null,
+    learning_goal: null,
+  };
+  console.log('[ACRLA] session_start_payload',
+    'level_type=' + (sessionStartPayload.moodle_payload.learning_preferences.level_type || ''),
+    'course_id=' + sessionStartPayload.moodle_payload.course_id,
+    'course_name=' + sessionStartPayload.moodle_payload.course_name,
+    'concept=' + (sessionStartPayload.moodle_payload.learning_preferences.launch_concept || ''),
+    'scores=' + JSON.stringify(sessionStartPayload.moodle_payload.scores),
+    'weak=' + JSON.stringify(sessionStartPayload.moodle_payload.weak_concepts)
+  );
+
+  clearMessages();
+  addMsg('bot', '<em>Starting session...</em>');
+  document.getElementById('chat-status').textContent = 'Connecting...';
+
+  try {
+    const res = await fetch(backend + '/api/v1/session/start', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(sessionStartPayload)
+    });
+    const data = await readJsonResponse(res);
+    sessionId = data.session_id;
+    clearMessages();
+    addMsg('bot', renderMarkdown(data.greeting));
+    if (launchContext?.levelType === 'overall') {
+      addMsg('bot', 'You clicked your overall grade. I will look across all your courses and focus on your weakest areas.');
+    } else if (launchContext?.levelType === 'course') {
+      const shownScore = launchContext.clickedScore ?? launchContext.score;
+      const scoreText = shownScore !== null && !Number.isNaN(shownScore)
+        ? `${shownScore}%`
+        : 'your current course score';
+      addMsg('bot', `Welcome back, <strong>${data.student_name || launchStudentName || 'Student'}</strong>! You are practicing <strong>${courseName}</strong>.<br>You clicked your course mastery: <strong>${scoreText}</strong>.`);
+    } else if (launchContext?.concept) {
+      const shownScore = launchContext.clickedScore ?? launchContext.score;
+      const scoreText = shownScore !== null && !Number.isNaN(shownScore)
+        ? `${shownScore}%`
+        : 'your current score';
+      const levelText = launchContext.levelType || 'chapter';
+      const supportText = launchContext.score !== null && launchContext.score < 60
+        ? 'This is a weak concept, so we will start remediation here.'
+        : 'We will focus this session here.';
+      addMsg('bot', `You clicked your ${levelText} mastery for <strong>${launchContext.concept}</strong> in <strong>${courseName}</strong>: <strong>${scoreText}</strong>.<br>${supportText}`);
+    }
+    syncRouteLabel(data.selected_pipeline || data.source_mode);
+    const select = document.getElementById('diff-select');
+    const suggested = data.suggested_difficulty || 'medium';
+    selectedDifficulty = data.difficulty || suggested;
+    difficultyManuallySelected = false;
+    select.innerHTML = `
+      <option value="easy" ${selectedDifficulty === 'easy' ? 'selected' : ''}>Easy ${suggested === 'easy' ? '(Suggested)' : ''}</option>
+      <option value="medium" ${selectedDifficulty === 'medium' ? 'selected' : ''}>Medium ${suggested === 'medium' ? '(Suggested)' : ''}</option>
+      <option value="hard" ${selectedDifficulty === 'hard' ? 'selected' : ''}>Hard ${suggested === 'hard' ? '(Suggested)' : ''}</option>
+    `;
+    document.getElementById('diff-select').value = selectedDifficulty;
+    updateDifficultyDot(selectedDifficulty);
+    if (data.weak_concepts.length > 0) {
+      addMsg('bot', `📌 Focus areas: <strong>${data.weak_concepts.slice(0,3).join(', ')}</strong>`);
+    }
+  } catch (e) {
+    clearMessages();
+    addMsg('bot', `⚠️ Connection failed: ${e.message}. Is the backend running?`);
+    document.getElementById('chat-status').textContent = 'Disconnected';
+  }
+}
+
+// ==========================================================
+// Chat Messaging and Automatic Routing Badge
+// ==========================================================
+
+async function sendMsg() {
+  // The text input and send button keep working exactly as before -- this
+  // is now a thin wrapper over sendChatMessage (defined later in this file),
+  // shared with the MCQ option buttons so both paths go through the same
+  // markdown/MCQ/feedback/badge rendering.
+  const input = document.getElementById('msg-input');
+  const msg = input.value.trim();
+  if (!msg) return;
+  if (!sessionId) { addMsg('bot', '⚠️ Please start a session first.'); return; }
+  input.value = '';
+  await sendChatMessage(msg);
+}
+
+async function changeDifficulty(value) {
+  // Difficulty remains student-selectable; internal/external response routing
+  // is automatic and is not controlled from the UI.
+  if (!sessionId) return;
+  document.getElementById('diff-select').value = value;
+  selectedDifficulty = value;
+  difficultyManuallySelected = true;
+  const backend = document.getElementById('cfg-backend').value;
+  try {
+    const res = await fetch(backend + '/api/v1/chat', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      session_id: sessionId,
+      message: `Change difficulty to ${value}`,
+      student_id: studentId,
+    })
+    });
+    const data = await readJsonResponse(res);
+    selectedDifficulty = data.difficulty || value;
+    document.getElementById('diff-select').value = selectedDifficulty;
+    updateDifficultyDot(selectedDifficulty);
+    syncRouteLabel(data.selected_pipeline || data.source_mode);
+  } catch (e) {
+    addMsg('bot', 'Error: ' + e.message);
+    return;
+  }
+  addMsg('bot', `✅ Difficulty changed to <strong>${cap(value)}</strong>.`);
+}
+
+async function openAssessment() {
+  // Quick Progress Check is the only workflow that updates mastery. Ordinary
+  // chat messages and practice questions leave mastery unchanged.
+  const progressBtnEl = document.getElementById('progress-btn');
+  if (progressBtnEl) {
+    progressBtnEl.classList.remove('pulse');
+    progressButtonPulsing = true; // never re-pulse once the button has been used
+  }
+  if (!sessionId) {
+    addMsg('bot', 'Please start a session first, then I can check your progress.');
+    return;
+  }
+  const modal = document.getElementById('assessment-modal');
+  const body = document.getElementById('assessment-body');
+  const result = document.getElementById('assessment-result');
+  const submit = document.getElementById('assessment-submit');
+  modal.classList.remove('hidden');
+  body.innerHTML = 'Loading assessment...';
+  result.textContent = '';
+  submit.disabled = false;
+  currentAssessment = null;
+
+  const backend = document.getElementById('cfg-backend').value;
+  try {
+    const res = await fetch(backend + '/api/v1/assessment/start', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ session_id: sessionId, student_id: studentId })
+    });
+    const data = await readJsonResponse(res);
+    currentAssessment = data;
+    body.innerHTML = `
+      <p style="font-size:13px; color:#555; margin-bottom:8px;">
+        ${cap(data.level_type)} progress check${data.concept ? `: <strong>${data.concept}</strong>` : ''}
+      </p>
+      <p style="font-size:12px; color:#666; margin-bottom:8px;">
+        Initial Moodle mastery: <strong>${data.moodle_initial_mastery}%</strong><br>
+        Current ACRLA mastery: <strong>${data.current_acrla_mastery}%</strong>
+      </p>
+      ${data.questions.map((q, idx) => `
+        <div class="assessment-question">
+          <p><strong>${idx + 1}.</strong> ${q.prompt}</p>
+          ${q.options.map(option => {
+            const value = option.trim().charAt(0).toUpperCase();
+            return `
+              <label class="assessment-option">
+                <input type="radio" name="${q.id}" value="${value}">
+                ${option}
+              </label>
+            `;
+          }).join('')}
+        </div>
+      `).join('')}
+    `;
+  } catch (e) {
+    body.innerHTML = `Could not open the assessment: ${e.message}`;
+    submit.disabled = true;
+  }
+}
+
+function closeAssessment() {
+  document.getElementById('assessment-modal').classList.add('hidden');
+}
+
+async function submitAssessment() {
+  if (!currentAssessment) return;
+  const answers = {};
+  for (const q of currentAssessment.questions) {
+    const checked = document.querySelector(`input[name="${q.id}"]:checked`);
+    if (!checked) {
+      document.getElementById('assessment-result').textContent = 'Please answer all 3 questions first.';
+      return;
+    }
+    answers[q.id] = checked.value;
+  }
+
+  const backend = document.getElementById('cfg-backend').value;
+  const submit = document.getElementById('assessment-submit');
+  submit.disabled = true;
+  try {
+    const res = await fetch(backend + '/api/v1/assessment/submit', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        assessment_id: currentAssessment.assessment_id,
+        session_id: sessionId,
+        student_id: studentId,
+        answers,
+      })
+    });
+    const data = await readJsonResponse(res);
+    setMasteryDisplay(data.updated_mastery);
+    const stayed = Number(data.mastery_delta || 0) <= 0;
+    const message = stayed
+      ? `Your mastery stayed at ${data.updated_mastery}%. Keep practicing before trying again.`
+      : `Mastery updated: ${data.previous_mastery}% &rarr; ${data.updated_mastery}%.`;
+    document.getElementById('assessment-result').innerHTML =
+      `Initial Moodle mastery: ${data.moodle_initial_mastery}%. Current ACRLA mastery: ${data.current_acrla_mastery}%.<br>${message} (${data.correct}/${data.total} correct, assessment score ${data.assessment_score}%).`;
+    addMsg('bot', `Progress check complete. <strong>${message}</strong>`);
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({
+        type: 'acrla:mastery-updated',
+        student_id: studentId,
+        level_type: data.level_type,
+        course_id: data.course_id,
+        concept: data.concept,
+        current_acrla_mastery: data.current_acrla_mastery,
+        updated_mastery: data.updated_mastery,
+      }, '*');
+    }
+  } catch (e) {
+    submit.disabled = false;
+    document.getElementById('assessment-result').textContent = 'Could not submit assessment: ' + e.message;
+  }
+}
+
+// ==========================================================
+// Markdown rendering for bot replies
+// ==========================================================
+
+function escapeHtmlText(str) {
+  return String(str == null ? '' : str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+// ==========================================================
+// Safe math rendering (KaTeX). trust:false keeps it sandboxed against
+// dangerous commands (\includegraphics, \href, ...) -- the standard way
+// to render untrusted TeX text. Falls back to the escaped raw source
+// (never raw/unescaped HTML) if KaTeX isn't loaded or fails to parse.
+// ==========================================================
+function renderKatexSafe(latex, displayMode) {
+  try {
+    if (typeof katex === 'undefined' || !katex.renderToString) return escapeHtmlText(latex);
+    return katex.renderToString(latex, { throwOnError: false, displayMode: !!displayMode, strict: 'ignore', trust: false });
+  } catch (e) {
+    return escapeHtmlText(latex);
+  }
+}
+
+// Inline-level Markdown (code/bold/italic) applied to text that has ALREADY
+// been HTML-escaped -- placeholder tokens (CODEBLOCK/MATHBLOCK, plain
+// letters+digits) pass through untouched and get restored afterward.
+function renderInlineSpans(escapedText) {
+  let t = escapedText;
+  t = t.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+  t = t.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+  t = t.replace(/(^|[^*\w])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
+  // Safety net: an unmatched ** left over (odd count) never leaks raw.
+  t = t.replace(/\*\*/g, '');
+  return t;
+}
+
+// Renders one blank-line-separated block (heading / list / plain paragraph).
+function renderMarkdownBlock(block, mathBlocks) {
+  if (!block) return '';
+  // A block that is ONLY a display-math or code placeholder passes through
+  // as its own block-level element rather than being wrapped in <p>.
+  const soleMath = block.match(/^MATHBLOCK(\d+)$/);
+  if (soleMath && mathBlocks[Number(soleMath[1])] && mathBlocks[Number(soleMath[1])].display) {
+    return block; // restored to a block-level <div> later
+  }
+  if (/^CODEBLOCK\d+$/.test(block)) return block; // restored to a <pre> block later
+
+  // Horizontal rule ( --- / *** / ___ on its own ) -- removed rather than
+  // shown as literal dashes; the card/paragraph spacing already provides
+  // the visual divider tutoring content needs.
+  if (/^(?:-{3,}|\*{3,}|_{3,})$/.test(block)) return '';
+
+  // Heading: leading #'s (any of #.....###### ) -- all render as one
+  // compact section-heading size, matching "small section heading" intent
+  // rather than reproducing 6 literal Markdown heading weights.
+  const headingMatch = block.match(/^#{1,6}\s+(.+)$/);
+  if (headingMatch && !headingMatch[1].includes('\n')) {
+    return `<h4>${renderInlineSpans(escapeHtmlText(headingMatch[1]))}</h4>`;
+  }
+
+  const lines = block.split(/\n/);
+
+  // Bullet list: every line starts with "- " or "* ".
+  if (lines.length && lines.every(line => /^\s*[-*]\s+/.test(line))) {
+    const items = lines.map(line => renderInlineSpans(escapeHtmlText(line.replace(/^\s*[-*]\s+/, ''))));
+    return '<ul>' + items.map(item => `<li>${item}</li>`).join('') + '</ul>';
+  }
+
+  // Numbered list: every line starts with "1. " / "1) ".
+  if (lines.length && lines.every(line => /^\s*\d+[.)]\s+/.test(line))) {
+    const items = lines.map(line => renderInlineSpans(escapeHtmlText(line.replace(/^\s*\d+[.)]\s+/, ''))));
+    return '<ol>' + items.map(item => `<li>${item}</li>`).join('') + '</ol>';
+  }
+
+  // Plain paragraph -- single newlines inside it become <br>.
+  const escaped = escapeHtmlText(block).replace(/\n/g, '<br>');
+  return `<p>${renderInlineSpans(escaped)}</p>`;
+}
+
+function renderMarkdown(raw) {
+  if (raw == null) return '';
+  let text = String(raw);
+
+  // Pull fenced code blocks out first so nothing below (bold/headers/lists/
+  // math) ever touches their literal content.
+  const codeBlocks = [];
+  text = text.replace(/```[a-zA-Z0-9_+-]*\n?([\s\S]*?)```/g, (match, code) => {
+    const idx = codeBlocks.length;
+    codeBlocks.push(code.replace(/\n$/, ''));
+    return `\n\nCODEBLOCK${idx}\n\n`;
+  });
+
+  // Display math: $$...$$ -- extracted before inline math so its own $
+  // characters are never mistaken for inline-math delimiters.
+  const mathBlocks = [];
+  text = text.replace(/\$\$([\s\S]+?)\$\$/g, (match, latex) => {
+    const idx = mathBlocks.length;
+    mathBlocks.push({ latex: latex.trim(), display: true });
+    return `\n\nMATHBLOCK${idx}\n\n`;
+  });
+
+  // Inline math: $...$ -- only when the content contains a LaTeX command
+  // (a backslash), so an ordinary pair of currency amounts on one line
+  // ("$150 and $200") is never mistaken for a math span and left exactly
+  // as written; a real inline formula ("$70^\circ\text{F}$") always has one.
+  // Content is (escaped-char | non-$ char)+ so an escaped dollar INSIDE the
+  // formula (e.g. "...\rightarrow \$150$") is never mistaken for the
+  // closing delimiter itself.
+  text = text.replace(/\$((?:\\.|[^$\n])+?)\$/g, (match, inner) => {
+    if (!inner.includes('\\')) return match;
+    const idx = mathBlocks.length;
+    mathBlocks.push({ latex: inner.trim(), display: false });
+    return `MATHBLOCK${idx}`;
+  });
+
+  // Any backslash-escaped dollar left OUTSIDE a math span (i.e. still
+  // literal at this point) is plain escaped currency, not math -- "\$225"
+  // must render as "$225", never open a math block.
+  text = text.replace(/\\\$/g, '$');
+
+  // Defensive fallback: a raw LaTeX command that ends up OUTSIDE any
+  // $...$/$$...$$ pair (never properly delimited by the model to begin
+  // with, so nothing above could have caught it) is still converted to
+  // readable text rather than left as visible backslash syntax.
+  text = text
+    .replace(/\\text\{([^{}]*)\}/g, "$1")
+    .replace(/\\times/g, "×")
+    .replace(/\\rightarrow/g, "→")
+    .replace(/\\circ/g, "°");
+
+  // Block-level parse: split on blank lines, classify+render each block.
+  const html = text.split(/\n{2,}/).map(block => renderMarkdownBlock(block.trim(), mathBlocks)).filter(Boolean).join('');
+
+  // Restore fenced code blocks as a styled block with a copy button.
+  let out = html.replace(/CODEBLOCK(\d+)/g, (match, idx) => {
+    const code = codeBlocks[Number(idx)];
+    const codeId = 'code-' + Math.random().toString(36).slice(2, 9);
+    return `<div class="code-block-wrap"><button type="button" class="copy-btn" onclick="copyCodeBlock('${codeId}', this)">Copy</button><pre><code id="${codeId}">${escapeHtmlText(code)}</code></pre></div>`;
+  });
+
+  // Restore math placeholders as KaTeX output -- display math gets its own
+  // centered, scrollable block; inline math renders inline at text size.
+  out = out.replace(/MATHBLOCK(\d+)/g, (match, idxStr) => {
+    const idx = Number(idxStr);
+    const entry = mathBlocks[idx];
+    if (!entry) return '';
+    const rendered = renderKatexSafe(entry.latex, entry.display);
+    return entry.display ? `<div class="katex-block">${rendered}</div>` : rendered;
+  });
+
+  return out;
+}
+
+function copyCodeBlock(codeId, button) {
+  const codeEl = document.getElementById(codeId);
+  if (!codeEl) return;
+  const text = codeEl.textContent;
+  const onDone = () => {
+    const original = button.textContent;
+    button.textContent = 'Copied!';
+    window.setTimeout(() => { button.textContent = original; }, 1200);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(onDone).catch(() => fallbackCopyText(text, onDone));
+  } else {
+    fallbackCopyText(text, onDone);
+  }
+}
+
+function fallbackCopyText(text, onDone) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand('copy'); } catch (e) { /* clipboard unavailable */ }
+  document.body.removeChild(ta);
+  onDone();
+}
+
+// ==========================================================
+// MCQ option detection and rendering
+// ==========================================================
+
+function detectMcqOptions(rawText) {
+  // Normalize option markers onto their own line first -- generated MC
+  // text can arrive with all four options run together on one line (or
+  // wrapped in a single bold span, which would otherwise hide the "A."/
+  // "B." markers from the line-anchored regex below). Splitting before a
+  // mid-line "B./C./D." marker lets the same per-line detection find every
+  // option either way, without a second code path.
+  const normalized = String(rawText)
+    .replace(/\*\*/g, '')
+    .replace(/([^\n])\s+([A-D][.)\-]\s+)/g, '$1\n$2');
+  const lines = normalized.split(/\n/);
+  // Matches "A.", "A)", "A -" (and no-space variants "A.", "A)", "A-").
+  const optionRegex = /^\s*([A-D])\s*[.)\-]\s+(.+?)\s*$/;
+  const options = [];
+  const remaining = [];
+  lines.forEach(line => {
+    const match = line.match(optionRegex);
+    if (match) {
+      options.push({ letter: match[1], text: match[2] });
+    } else {
+      remaining.push(line);
+    }
+  });
+  // Require option A plus at least one more in sequence -- a real MCQ block,
+  // not a coincidental line starting with "A." in ordinary prose.
+  if (!options.some(o => o.letter === 'A') || options.length < 2) {
+    return null;
+  }
+  return { options, remainingText: remaining.join('\n').trim() };
+}
+
+function renderMcqOptions(options) {
+  const buttons = options.map(opt =>
+    `<button type="button" class="mcq-option" onclick="selectMcqOption(this, '${opt.letter}')">${opt.letter}. ${escapeHtmlText(opt.text)}</button>`
+  ).join('');
+  return `<div class="mcq-options" data-mcq-answered="0">${buttons}</div>`;
+}
+
+function selectMcqOption(button, letter) {
+  const group = button.closest('.mcq-options');
+  if (!group || group.dataset.mcqAnswered === '1') return;
+  group.dataset.mcqAnswered = '1';
+  Array.prototype.forEach.call(group.querySelectorAll('.mcq-option'), btn => {
+    btn.disabled = true;
+  });
+  button.classList.add('mcq-selected');
+  sendChatMessage(letter);
+}
+
+// A trailing "Tip: ..." line (from tools.tutor_state_tools' adaptive
+// question wrapper) is pulled out and shown as a small secondary line
+// instead of blending into the question paragraph -- purely a rendering
+// choice keyed on the line's own leading "Tip:" label, same presentational
+// class as the existing MCQ-option/feedback-icon detection above.
+function extractTrailingTip(text) {
+  const match = String(text).match(/\n\s*Tip:\s*([^\n]+)\s*$/);
+  if (!match) return { mainText: text, tip: null };
+  return { mainText: text.slice(0, match.index).trim(), tip: match[1].trim() };
+}
+
+function renderBotReplyBody(rawText) {
+  const { mainText, tip } = extractTrailingTip(rawText);
+  const tipHtml = tip ? `<div class="practice-tip">Tip: ${escapeHtmlText(tip)}</div>` : '';
+  const mcq = detectMcqOptions(mainText);
+  if (mcq) {
+    return renderMarkdown(mcq.remainingText) + renderMcqOptions(mcq.options) + tipHtml;
+  }
+  return renderMarkdown(mainText) + tipHtml;
+}
+
+// ==========================================================
+// Proactive remediation focus card -- rendered once, on the exact turn
+// data.proactive_bootstrap.active is true (see services/remediation_bootstrap.py
+// and services/chat_orchestrator.py's _proactive_bootstrap_payload). Driven
+// entirely by structured backend fields, never by parsing the reply text.
+// ==========================================================
+
+// Human-friendly label for a structured selection_reason value -- a fixed
+// lookup on a BACKEND ENUM, never a message/text pattern match.
+const SELECTION_REASON_LABELS = {
+  chapter_launch_selected_concept: 'You opened this topic',
+  lowest_mastery_in_current_course: 'Needs the most attention in this course',
+  lowest_mastery_across_all_courses: 'Needs the most attention across your courses',
+};
+
+function renderFocusCard(bootstrap) {
+  const concept = escapeHtmlText(bootstrap.concept || '');
+  const courseName = bootstrap.course_name ? escapeHtmlText(bootstrap.course_name) : '';
+  const mastery = Number(bootstrap.concept_mastery);
+  const masteryText = Number.isFinite(mastery) ? `${mastery}%` : '—';
+  const reasonText = SELECTION_REASON_LABELS[bootstrap.selection_reason] || '';
+  return (
+    '<div class="focus-card">' +
+      '<div class="focus-card-eyebrow">Today’s focus</div>' +
+      `<div class="focus-card-concept">${concept}</div>` +
+      (courseName ? `<div class="focus-card-course">${courseName}</div>` : '') +
+      `<div class="focus-card-mastery-row"><span>Topic mastery</span><strong>${masteryText}</strong></div>` +
+      (reasonText ? `<div class="focus-card-reason">${escapeHtmlText(reasonText)}</div>` : '') +
+    '</div>'
+  );
+}
+
+function insertFocusCard(bootstrap) {
+  const box = document.getElementById('messages');
+  const wrap = document.createElement('div');
+  wrap.innerHTML = renderFocusCard(bootstrap);
+  box.appendChild(wrap.firstElementChild);
+  box.scrollTop = box.scrollHeight;
+}
+
+// ==========================================================
+// Next-action CTA -- shown once per EXPLAIN turn. Convenience UI only:
+// clicking it sends the exact same natural-language request through the
+// existing sendChatMessage pipeline, so the EXISTING semantic tutor-state
+// machine (tutor_signal) decides what happens next -- never a second
+// tutoring system, never a mastery update.
+// ==========================================================
+
+// One CTA per state, each just sending a natural-language continuation
+// through the EXISTING chat pipeline (sendChatMessage) -- the SAME
+// semantic planner/tutor-state machine decides what happens next; this is
+// convenience UI only, never a second tutoring system or a mastery update.
+const TUTOR_CTA_BY_STATE = {
+  EXPLAIN: { label: 'Show me an example', handler: 'requestExample(this)' },
+  EXAMPLE: { label: 'Try a question', handler: 'requestPractice(this)' },
+  // GUIDED_PRACTICE deliberately has no entry here: while a question is
+  // actively pending there is no "continue" CTA -- the student answers
+  // through the normal chat input (or the MCQ buttons), never a button
+  // that skips ahead. PROGRESS_CHECK_READY reuses the SAME existing
+  // Quick Progress Check flow (openAssessment(), the persistent header
+  // button), never a second assessment path.
+  PROGRESS_CHECK_READY: { label: 'Check my progress', handler: 'openAssessment()' },
+};
+
+function renderNextActionRow(tutorState, isFeedback) {
+  let cta = TUTOR_CTA_BY_STATE[tutorState] || null;
+  if (!cta && tutorState === 'GUIDED_PRACTICE' && isFeedback) {
+    cta = { label: 'Next question', handler: 'requestNextQuestion(this)' };
+  }
+  if (!cta) return;
+  const box = document.getElementById('messages');
+  const row = document.createElement('div');
+  row.className = 'tutor-cta-row';
+  row.innerHTML = `<button type="button" class="tutor-cta-btn" onclick="${cta.handler}">${escapeHtmlText(cta.label)}</button>`;
+  box.appendChild(row);
+  box.scrollTop = box.scrollHeight;
+}
+
+function requestExample(button) {
+  if (button) button.disabled = true;
+  sendChatMessage('Show me an example');
+}
+
+function requestPractice(button) {
+  if (button) button.disabled = true;
+  sendChatMessage("Yes, let's try a practice question.");
+}
+
+function requestNextQuestion(button) {
+  if (button) button.disabled = true;
+  sendChatMessage('Next question please.');
+}
+
+// ==========================================================
+// Tutor state badge -- prefers the real backend `tutor_state` field
+// (human-friendly label lookup, never exposing internal names like
+// GUIDED_PRACTICE/RETRY_OR_NEXT to the student); falls back to a
+// best-effort content heuristic only for turns where the backend didn't
+// return a tutor_state at all.
+// ==========================================================
+
+const TUTOR_STATE_LABELS = {
+  EXPLAIN: { icon: '📖', label: 'Learn', cls: 'tutor-badge-explain' },
+  EXAMPLE: { icon: '💡', label: 'Worked example', cls: 'tutor-badge-example' },
+  GUIDED_PRACTICE: { icon: '✏️', label: 'Your turn', cls: 'tutor-badge-practice' },
+  FEEDBACK: { icon: '✅', label: 'Feedback', cls: 'tutor-badge-feedback' },
+  RETRY_OR_NEXT: { icon: '✅', label: 'Feedback', cls: 'tutor-badge-feedback' },
+  PROGRESS_CHECK_READY: { icon: '🎯', label: 'Ready to check progress', cls: 'tutor-badge-progress' },
+};
+
+// A tutoring message's structural presentation (eyebrow label + optional
+// tinted card). Driven ONLY by the backend's structured tutor_state field
+// (plus the pre-existing, purely-decorative correct/wrong detection this
+// project already used for feedback icon/border styling) -- never by
+// parsing the reply text for pedagogical meaning.
+const TUTOR_CARD_CLASS_BY_STATE = { EXAMPLE: 'tutor-card-example', GUIDED_PRACTICE: 'tutor-card-practice' };
+
+function tutorPresentationInfo(tutorState, isFeedback) {
+  if (!tutorState || isFeedback || tutorState === 'FEEDBACK' || tutorState === 'RETRY_OR_NEXT') {
+    // Feedback keeps the existing subtle checkmark/border-left treatment
+    // (section 9: scannable, not a banner) instead of a second label.
+    return null;
+  }
+  const info = TUTOR_STATE_LABELS[tutorState];
+  if (!info) return null;
+  return { icon: info.icon, label: info.label, cardClass: TUTOR_CARD_CLASS_BY_STATE[tutorState] || null };
+}
+
+function tutorStateBadgeFromField(tutorState) {
+  return TUTOR_STATE_LABELS[tutorState] || null;
+}
+
+function inferTutorStateBadge(rawText, data) {
+  const text = String(rawText || '');
+  if (/quick progress check/i.test(text) && /scored/i.test(text)) {
+    return { icon: '🎯', label: 'Progress Check Ready', cls: 'tutor-badge-progress' };
+  }
+  if (/want to try a quick progress check|progress check ready/i.test(text)) {
+    return { icon: '🎯', label: 'Progress Check Ready', cls: 'tutor-badge-progress' };
+  }
+  if (/\bcorrect!|\bnot quite\b|\bwell done\b|\bthat's right\b/i.test(text)) {
+    return { icon: '✅', label: 'Feedback', cls: 'tutor-badge-feedback' };
+  }
+  if (/question\s+\d+\s+of\s+\d+/i.test(text) || /(easy|moderate|hard)\s+question\s+on\s+/i.test(text)) {
+    return { icon: '✏️', label: 'Practice', cls: 'tutor-badge-practice' };
+  }
+  if (/for example|worked example|here'?s an example|let'?s look at an example/i.test(text)) {
+    return { icon: '💡', label: 'Example', cls: 'tutor-badge-example' };
+  }
+  const goal = data && (data.agent_goal || data.goal);
+  if (goal === 'concept_explanation' || goal === 'personalized_tutoring') {
+    return { icon: '📖', label: 'Explaining', cls: 'tutor-badge-explain' };
+  }
+  return null;
+}
+
+function updateTutorStateBadge(info) {
+  const el = document.getElementById('tutor-badge');
+  if (!el) return;
+  if (!info) {
+    el.style.display = 'none';
+    return;
+  }
+  el.className = 'tutor-state-badge ' + info.cls;
+  el.style.display = 'inline-flex';
+  el.textContent = info.icon + ' ' + info.label;
+}
+
+// ==========================================================
+// Correct / wrong feedback detection + session practice progress
+// ==========================================================
+
+function detectFeedback(text) {
+  if (/\bcorrect!|\bwell done\b|\bthat's right\b/i.test(text)) return 'correct';
+  if (/\bnot quite\b|\bincorrect\b|\bwrong\b/i.test(text)) return 'wrong';
+  return null;
+}
+
+let practiceHistory = {};
+let lastPracticeConcept = null;
+let totalPracticeAttempted = 0;
+let progressButtonPulsing = false;
+
+function trackPracticeQuestion(text) {
+  const match = text.match(/question\s+\d+\s+of\s+\d+\s+on\s+([^:\n]+):/i) ||
+    text.match(/(?:easy|moderate|hard)\s+question\s+on\s+([^:\n]+):/i);
+  if (match) {
+    lastPracticeConcept = match[1].trim();
+  }
+}
+
+function recordPracticeResult(correct) {
+  const concept = lastPracticeConcept || 'Practice';
+  if (!practiceHistory[concept]) practiceHistory[concept] = [];
+  practiceHistory[concept].push(!!correct);
+  totalPracticeAttempted++;
+  maybeStartProgressPulse();
+  return { concept, history: practiceHistory[concept] };
+}
+
+function renderProgressRow(concept, history) {
+  // "Chap:"-prefixed source-style concept names are already cleaned up on
+  // the backend (services.course_concepts.display_concept_name, applied
+  // wherever a concept reaches practice-question text) -- concept here is
+  // whatever that clean text already is, never re-parsed/rewritten here.
+  const correctCount = history.filter(Boolean).length;
+  const icons = history.map(ok => ok ? '✅' : '❌').join('');
+  return `<div class="practice-progress-row">${escapeHtmlText(concept)} practice · ${icons} ${correctCount}/${history.length} correct</div>`;
+}
+
+function maybeStartProgressPulse() {
+  if (progressButtonPulsing || totalPracticeAttempted < 3) return;
+  const btn = document.getElementById('progress-btn');
+  if (btn) {
+    btn.classList.add('pulse');
+    progressButtonPulsing = true;
+  }
+}
+
+// ==========================================================
+// Source citation pill badge
+// ==========================================================
+
+function titleCaseWords(text) {
+  return text.replace(/\w\S*/g, word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase());
+}
+
+// Turns a raw source filename/label ("ch3_linear_regression.pdf") into a
+// compact, de-emphasized display name ("Chap: Linear Regression") -- never
+// appends ".pdf" (it is always stripped, so it can never appear twice).
+// Purely cosmetic string formatting for the secondary source row, not a
+// routing decision.
+function formatSourceLabel(raw) {
+  let name = String(raw || '').trim();
+  name = name.replace(/\.pdf$/i, '');
+  name = name.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!name) return 'Course material';
+  const chapterMatch = name.match(/^(?:chapter|ch)\.?\s*(\d+)\s*[-:.]*\s*(.+)$/i);
+  if (chapterMatch && chapterMatch[2]) {
+    return `Chap: ${titleCaseWords(chapterMatch[2])}`;
+  }
+  return titleCaseWords(name);
+}
+
+function sourceBadgeHtml(route, sources) {
+  if (route !== 'internal_rag' || !sources || !sources.length) return '';
+  const badges = sources.map(name =>
+    `<span class="source-badge">📄 Course material · ${escapeHtmlText(formatSourceLabel(name))}</span>`
+  ).join('');
+  return `<div class="source-badge-row">${badges}</div>`;
+}
+
+// ==========================================================
+// Assembled bot-reply renderer -- markdown + MCQ + feedback styling +
+// tutor-state badge + practice progress, all from one raw reply string.
+// ==========================================================
+
+function addBotReply(rawText, data) {
+  trackPracticeQuestion(rawText);
+  const feedback = detectFeedback(rawText);
+  const route = normalizePipeline(data && (data.selected_pipeline || data.source_mode));
+  const visibleSources = route === 'internal_rag'
+    ? ((data && data.retrieved_sources && data.retrieved_sources.length) ? data.retrieved_sources : ((data && data.sources) || []))
+    : [];
+
+  // One-time "today's focus" card -- only on the exact turn the backend
+  // reports a proactive bootstrap just started (never on any later turn).
+  if (data && data.proactive_bootstrap && data.proactive_bootstrap.active) {
+    insertFocusCard(data.proactive_bootstrap);
+  }
+
+  const tutorState = data && data.tutor_state;
+  const presentation = tutorPresentationInfo(tutorState, !!feedback);
+  const eyebrowHtml = presentation
+    ? `<div class="tutor-msg-eyebrow">${presentation.icon} ${escapeHtmlText(presentation.label)}</div>`
+    : '';
+  const bodyHtml = eyebrowHtml + renderBotReplyBody(rawText) + sourceBadgeHtml(route, visibleSources);
+  const el = addMsg('bot', bodyHtml);
+  if (presentation && presentation.cardClass) el.classList.add(presentation.cardClass);
+
+  if (feedback) {
+    el.classList.add(feedback === 'correct' ? 'msg-correct' : 'msg-wrong');
+    const icon = document.createElement('span');
+    icon.className = 'feedback-icon';
+    icon.textContent = feedback === 'correct' ? '✅' : '❌';
+    el.insertBefore(icon, el.firstChild);
+    const { concept, history } = recordPracticeResult(feedback === 'correct');
+    const box = document.getElementById('messages');
+    const row = document.createElement('div');
+    row.innerHTML = renderProgressRow(concept, history);
+    box.appendChild(row.firstChild);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  updateTutorStateBadge(tutorState ? tutorStateBadgeFromField(tutorState) : inferTutorStateBadge(rawText, data));
+
+  // Clear next-step action -- one CTA per turn, per tutor state (section 7),
+  // never filling the UI with more than the one primary button.
+  renderNextActionRow(tutorState, !!feedback);
+
+  return el;
+}
+
+// ==========================================================
+// Message sending (shared by the input box and MCQ option buttons)
+// ==========================================================
+
+async function sendChatMessage(msg) {
+  if (!msg) return;
+  if (!sessionId) { addMsg('bot', '⚠️ Please start a session first.'); return; }
+
+  addMsg('user', escapeHtmlText(msg));
+  showTyping();
+
+  const backend = document.getElementById('cfg-backend').value;
+  try {
+    const res = await fetch(backend + '/api/v1/chat', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ session_id: sessionId, message: msg, student_id: studentId })
+    });
+    const data = await readJsonResponse(res);
+    hideTyping();
+    console.log('[ACRLA route]',
+      'selected_pipeline=' + (data.selected_pipeline || ''),
+      'source_mode=' + (data.source_mode || ''),
+      'retrieved_sources=' + JSON.stringify(data.retrieved_sources || data.sources || [])
+    );
+    const reply = data.reply.replace(/\[MASTERY:[^\]]+\]/g, '');
+    syncRouteLabel(data.selected_pipeline || data.source_mode);
+    addBotReply(reply, data);
+    if (data.difficulty) {
+      if (!difficultyManuallySelected) {
+        selectedDifficulty = data.difficulty;
+        document.getElementById('diff-select').value = data.difficulty;
+      } else {
+        document.getElementById('diff-select').value = selectedDifficulty;
+      }
+      updateDifficultyDot(document.getElementById('diff-select').value);
+    }
+  } catch (e) {
+    hideTyping();
+    addMsg('bot', '⚠️ Error: ' + e.message);
+  }
+}
+
+function updateDifficultyDot(value) {
+  const dot = document.getElementById('diff-dot');
+  if (!dot) return;
+  dot.classList.remove('difficulty-dot-easy', 'difficulty-dot-medium', 'difficulty-dot-hard');
+  dot.classList.add('difficulty-dot-' + (value === 'easy' ? 'easy' : value === 'hard' ? 'hard' : 'medium'));
+}
+
+function addMsg(role, html) {
+  const box = document.getElementById('messages');
+  const d = document.createElement('div');
+  d.className = `msg ${role}`;
+  d.innerHTML = html;
+  box.appendChild(d);
+  box.scrollTop = box.scrollHeight;
+  return d;
+}
+function clearMessages() { document.getElementById('messages').innerHTML = ''; }
+let typingEl = null;
+function showTyping() {
+  const box = document.getElementById('messages');
+  typingEl = document.createElement('div');
+  typingEl.className = 'msg bot typing';
+  typingEl.innerHTML = '<span></span><span></span><span></span>';
+  box.appendChild(typingEl);
+  box.scrollTop = box.scrollHeight;
+}
+function hideTyping() { if (typingEl) { typingEl.remove(); typingEl = null; } }
+function cap(s) { return s ? s[0].toUpperCase() + s.slice(1) : ''; }
+applyLaunchParams();
+</script>
+</body>
+</html>
